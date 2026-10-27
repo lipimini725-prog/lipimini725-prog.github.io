@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Asistencia NFC/RFID - U.E. Técnico Humanístico "2 de Agosto"</title>
+    
+    <!-- PWA Manifest configuration -->
+    <link rel="manifest" href='data:application/manifest+json,{
+        "name": "Asistencia NFC/RFID - U.E. 2 de Agosto",
+        "short_name": "Asistencia 2Agosto",
+        "description": "Sistema de Control de Asistencia con Lector Casero RC522",
+        "start_url": "./",
+        "display": "standalone",
+        "background_color": "#090d16",
+        "theme_color": "#2563eb",
+        "icons": [{
+            "src": "https://cdn-icons-png.flaticon.com/512/3602/3602123.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }]
+    }'>
+    <meta name="theme-color" content="#2563eb">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Asistencia 2Agosto">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                            950: '#090d16',
+                        },
+                        neon: {
+                            cyan: '#00f3ff',
+                            green: '#10b981',
+                            amber: '#f59e0b',
+                            rose: '#f43f5e',
+                            purple: '#a855f7'
+                        }
+                    },
+                    animation: {
+                        'pulse-glow': 'pulseGlow 1.5s infinite',
+                        'scan-line': 'scanLine 2s ease-in-out infinite',
+                        'ripple': 'rippleEffect 1.2s cubic-bezier(0, 0.2, 0.8, 1) infinite',
+                        'float': 'floatCard 4s ease-in-out infinite'
+                    },
+                    keyframes: {
+                        pulseGlow: {
+                            '0%, 100%': { boxShadow: '0 0 10px rgba(16, 185, 129, 0.3)' },
+                            '50%': { boxShadow: '0 0 25px rgba(0, 243, 255, 0.8)' }
+                        },
+                        scanLine: {
+                            '0%': { top: '0%' },
+                            '50%': { top: '95%' },
+                            '100%': { top: '0%' }
+                        },
+                        rippleEffect: {
+                            '0%': { transform: 'scale(0.8)', opacity: '1' },
+                            '100%': { transform: 'scale(2.2)', opacity: '0' }
+                        },
+                        floatCard: {
+                            '0%, 100%': { transform: 'translateY(0px) rotate(0deg)' },
+                            '50%': { transform: 'translateY(-6px) rotate(0.8deg)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- QRCode.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
+        
+        * {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* 3D Card Flip */
+        .card-3d-wrap { perspective: 1000px; }
+        .card-3d-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transform-style: preserve-3d;
+        }
+        .card-3d-inner.flipped { transform: rotateY(180deg); }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 1.25rem;
+        }
+        .card-back { transform: rotateY(180deg); }
+
+        .holographic-bg {
+            background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(0,243,255,0.18) 25%, rgba(168,85,247,0.18) 50%, rgba(255,255,255,0.05) 100%);
+            background-size: 200% 200%;
+            animation: holoShift 6s ease infinite;
+        }
+        @keyframes holoShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.82);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        @media print {
+            body * { visibility: hidden; }
+            #printableArea, #printableArea * { visibility: visible; }
+            #printableArea { position: absolute; left: 0; top: 0; width: 100%; color: black; background: white; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-brand-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-brand-500 selection:text-white antialiased overflow-x-hidden">
+
+    <!-- BARRA SUPERIOR DE NAVEGACIÓN -->
+    <header class="sticky top-0 z-50 glass-panel border-b border-slate-800/80 shadow-2xl">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+            
+            <!-- Branding Colegio -->
+            <div class="flex items-center space-x-3 cursor-pointer" onclick="setRole('teacher')">
+                <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-neon-cyan shadow-lg shadow-brand-500/30">
+                    <i data-lucide="cpu" class="w-6 h-6 text-white"></i>
+                    <span id="hardwareStatusPing" class="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-500 opacity-75"></span>
+                        <span id="hardwareLedDot" class="relative inline-flex rounded-full h-3 w-3 bg-slate-500"></span>
+                    </span>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-sm sm:text-base tracking-tight bg-gradient-to-r from-white via-slate-200 to-neon-cyan bg-clip-text text-transparent">
+                        U.E. "2 de Agosto" - Batallas
+                    </h1>
+                    <p class="text-[10px] font-semibold text-brand-400 tracking-wider uppercase flex items-center gap-1">
+                        <span>Control Asistencia RFID RC522</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Acciones Header -->
+            <div class="flex items-center space-x-2">
+                <!-- Estado Hardware Indicator Header -->
+                <div onclick="setRole('hardware')" class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] cursor-pointer hover:border-slate-700 transition">
+                    <i data-lucide="radio" class="w-3.5 h-3.5 text-neon-cyan"></i>
+                    <span id="headerHwText" class="text-slate-400 font-mono">Esperando Lector RC522...</span>
+                </div>
+
+                <!-- Botón Sonido -->
+                <button id="btnSoundToggle" onclick="toggleAudio()" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 transition border border-slate-700/50" title="Activar/Desactivar Audio">
+                    <i id="soundIcon" data-lucide="volume-2" class="w-4 h-4 text-neon-cyan"></i>
+                </button>
+
+                <!-- Instalar PWA -->
+                <button id="btnInstallPwa" onclick="installApp()" class="hidden bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-lg transition flex items-center space-x-1.5 animate-bounce">
+                    <i data-lucide="download-cloud" class="w-4 h-4"></i>
+                    <span class="hidden md:inline">Instalar App</span>
+                </button>
+
+                <!-- Navegación de Roles -->
+                <nav class="flex items-center space-x-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-xs">
+                    <button id="navTeacher" onclick="setRole('teacher')" class="px-3 py-1.5 rounded-lg font-semibold transition flex items-center space-x-1.5 bg-brand-600 text-white shadow-md">
+                        <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
+                        <span class="hidden md:inline">Maestro</span>
+                    </button>
+                    <button id="navStudent" onclick="setRole('student')" class="px-3 py-1.5 rounded-lg font-semibold transition flex items-center space-x-1.5 text-slate-400 hover:text-white">
+                        <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
+                        <span class="hidden md:inline">Alumno</span>
+                    </button>
+                    <button id="navHardware" onclick="setRole('hardware')" class="px-3 py-1.5 rounded-lg font-semibold transition flex items-center space-x-1.5 text-slate-400 hover:text-white">
+                        <i data-lucide="wrench" class="w-3.5 h-3.5"></i>
+                        <span class="hidden md:inline">Lector RC522</span>
+                    </button>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- BANNER DE REQUISITO HARDWARE REAL -->
+    <div id="hardwareNotificationBanner" class="no-print bg-slate-900 border-b border-slate-800 text-xs px-4 py-2 flex justify-between items-center text-slate-300">
+        <div class="flex items-center space-x-2 max-w-5xl">
+            <span class="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30 flex-shrink-0">
+                <i data-lucide="alert-triangle" class="w-3 h-3"></i> REQUISITO
+            </span>
+            <span class="truncate">
+                El registro de asistencia requiere recibir la señal real transmitida por el módulo <strong>RC522 vía USB OTG (WebSerial) o WiFi (ESP32/ESP8266)</strong>.
+            </span>
+        </div>
+        <button onclick="setRole('hardware')" class="text-neon-cyan hover:underline text-[11px] font-bold flex items-center gap-1 ml-2">
+            <span>Configurar Lector</span>
+            <i data-lucide="arrow-right" class="w-3 h-3"></i>
+        </button>
+    </div>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="max-w-7xl mx-auto w-full px-4 py-5 flex-grow">
+
+        <!-- ================================================================= -->
+        <!-- MODO 1: PROFESOR / MONITOR DE ASISTENCIA EN TIEMPO REAL -->
+        <!-- ================================================================= -->
+        <section id="viewTeacher" class="space-y-5">
+            
+            <!-- Panel Superior de Filtros e Indicadores -->
+            <div class="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
+                <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+                    <div>
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                            <i data-lucide="clipboard-check" class="text-brand-500"></i>
+                            Registro Oficial de Asistencia
+                        </h2>
+                        <p class="text-xs text-slate-400">Unidad Educativa Técnico Humanístico "2 de Agosto" - Batallas</p>
+                    </div>
+
+                    <!-- Configuración de Hora Límite y Reportes -->
+                    <div class="flex flex-wrap items-center gap-2 bg-slate-900/90 p-2 rounded-2xl border border-slate-800 text-xs">
+                        <div class="flex items-center space-x-2 px-2">
+                            <i data-lucide="clock" class="w-4 h-4 text-neon-amber"></i>
+                            <span class="text-slate-300 font-medium">Límite Entrada:</span>
+                            <input type="time" id="inputLimitTime" value="08:00" onchange="updateLimitTime()" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-white text-xs font-mono">
+                        </div>
+                        <div class="h-4 w-px bg-slate-800"></div>
+                        <button onclick="exportToCSV()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-600/20">
+                            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
+                            <span>Exportar Excel/CSV</span>
+                        </button>
+                        <button onclick="printAttendanceReport()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center space-x-1.5 border border-slate-700">
+                            <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                            <span>Imprimir</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Matriz de Selección Dinámica por Curso y Paralelo -->
+                <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                    
+                    <!-- Cursos (1ro a 6to) -->
+                    <div class="flex items-center space-x-1 bg-slate-950/90 p-1.5 rounded-2xl border border-slate-800/80 overflow-x-auto text-xs">
+                        <span class="px-2 text-slate-500 font-mono text-[10px] uppercase font-bold">Curso:</span>
+                        <button onclick="setFilterGrade('1ro')" class="btn-filter-grade px-3 py-1.5 rounded-xl font-bold transition" data-grade="1ro">1ro</button>
+                        <button onclick="setFilterGrade('2do')" class="btn-filter-grade px-3 py-1.5 rounded-xl font-bold transition" data-grade="2do">2do</button>
+                        <button onclick="setFilterGrade('3ro')" class="btn-filter-grade px-3 py-1.5 rounded-xl font-bold transition" data-grade="3ro">3ro</button>
+                        <button onclick="setFilterGrade('4to')" class="btn-filter-grade px-3 py-1.5 rounded-xl font-bold transition" data-grade="4to">4to</button>
+                        <button onclick="setFilterGrade('5to')" class="btn-filter-grade px-3 py-1.5 rounded-xl font-bold transition" data-grade="5to">5to</button>
+                        <button onclick="setFilterGrade('6to')" class="btn-filter-grade px-3 py-1.5 rounded-xl font-bold transition" data-grade="6to">6to</button>
+                    </div>
+
+                    <!-- Paralelos (A, B, C) & Búsqueda -->
+                    <div class="flex items-center space-x-3">
+                        <div class="flex items-center space-x-1 bg-slate-950/90 p-1.5 rounded-2xl border border-slate-800/80 text-xs">
+                            <span class="px-2 text-slate-500 font-mono text-[10px] uppercase font-bold">Paralelo:</span>
+                            <button onclick="setFilterParallel('A')" class="btn-filter-parallel px-3 py-1.5 rounded-xl font-bold transition" data-parallel="A">A</button>
+                            <button onclick="setFilterParallel('B')" class="btn-filter-parallel px-3 py-1.5 rounded-xl font-bold transition" data-parallel="B">B</button>
+                            <button onclick="setFilterParallel('C')" class="btn-filter-parallel px-3 py-1.5 rounded-xl font-bold transition" data-parallel="C">C</button>
+                        </div>
+
+                        <!-- Buscador -->
+                        <div class="relative flex-grow md:w-48">
+                            <input type="text" id="searchStudentInput" oninput="renderAttendanceTable()" placeholder="Buscar alumno..." class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500">
+                            <i data-lucide="search" class="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5"></i>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Métrica de Estadísticas -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="glass-panel p-4 rounded-2xl border border-slate-800">
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Leídos (Lector)</span>
+                    <p id="statTotal" class="text-2xl font-extrabold text-white mt-1">0</p>
+                </div>
+                <div class="glass-panel p-4 rounded-2xl border border-slate-800">
+                    <span class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Puntuales</span>
+                    <p id="statOnTime" class="text-2xl font-extrabold text-emerald-400 mt-1">0</p>
+                </div>
+                <div class="glass-panel p-4 rounded-2xl border border-slate-800">
+                    <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Atrasados</span>
+                    <p id="statLate" class="text-2xl font-extrabold text-amber-400 mt-1">0</p>
+                </div>
+                <div class="glass-panel p-4 rounded-2xl border border-slate-800">
+                    <span class="text-[11px] font-bold text-brand-400 uppercase tracking-wider">Salidas Registradas</span>
+                    <p id="statExit" class="text-2xl font-extrabold text-brand-400 mt-1">0</p>
+                </div>
+            </div>
+
+            <!-- TABLA DE RESULTADOS DE ASISTENCIA -->
+            <div id="printableArea" class="glass-panel rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+                
+                <div class="p-4 border-b border-slate-800/80 flex justify-between items-center bg-slate-900/50">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs text-slate-400 font-bold">Listado Filtrado:</span>
+                        <span id="labelCurrentFilter" class="bg-brand-500/20 text-brand-300 border border-brand-500/30 px-3 py-1 rounded-full text-xs font-mono font-bold">6to "A"</span>
+                    </div>
+                    
+                    <div class="flex items-center space-x-2 no-print">
+                        <button onclick="clearAttendanceData()" class="text-xs text-rose-400 hover:text-rose-300 font-semibold flex items-center space-x-1 px-2 py-1 bg-rose-500/10 rounded-lg border border-rose-500/20">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            <span>Borrar Registros</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="bg-slate-950/90 text-slate-400 font-mono uppercase text-[10px] tracking-wider border-b border-slate-800">
+                                <th class="p-3.5">Estudiante</th>
+                                <th class="p-3.5">Colegio</th>
+                                <th class="p-3.5">UID RFID (RC522)</th>
+                                <th class="p-3.5">Hora Entrada</th>
+                                <th class="p-3.5">Hora Salida</th>
+                                <th class="p-3.5">Estado</th>
+                                <th class="p-3.5 text-right no-print">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendanceTableBody" class="divide-y divide-slate-800/50">
+                            <!-- Filas dinámicas generadas únicamente al recibir señal del lector -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- MODO 2: ESTUDIANTE (CREDENCIAL NFC DUAL Y PAYLOAD CONFIGURABLE) -->
+        <!-- ================================================================= -->
+        <section id="viewStudent" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                <!-- Formulario de Configuración del Alumno -->
+                <div class="lg:col-span-5 glass-panel p-6 rounded-3xl space-y-5 border border-slate-800 shadow-xl">
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <div class="flex items-center space-x-2.5">
+                            <div class="p-2 rounded-xl bg-brand-500/10 text-brand-400 border border-brand-500/20">
+                                <i data-lucide="user-check" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-base font-bold text-white">Credencial de Estudiante</h2>
+                                <p class="text-xs text-slate-400">Datos para vincular con el tag RFID/NFC</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="formStudent" onsubmit="saveStudentProfile(event)" class="space-y-4 text-xs">
+                        <div>
+                            <label class="block font-semibold text-slate-300 mb-1">Unidad Educativa</label>
+                            <input type="text" id="inputSchool" required value="U.E. Técnico Humanístico 2 de Agosto" 
+                                class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
+                        </div>
+
+                        <div>
+                            <label class="block font-semibold text-slate-300 mb-1">Nombre Completo del Estudiante</label>
+                            <input type="text" id="inputName" required placeholder="Ej: Grover Condori Quispe" 
+                                class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block font-semibold text-slate-300 mb-1">Curso</label>
+                                <select id="inputGrade" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
+                                    <option value="1ro">1ro Secundaria</option>
+                                    <option value="2do">2do Secundaria</option>
+                                    <option value="3ro">3ro Secundaria</option>
+                                    <option value="4to">4to Secundaria</option>
+                                    <option value="5to">5to Secundaria</option>
+                                    <option value="6to" selected>6to Secundaria</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-slate-300 mb-1">Paralelo</label>
+                                <select id="inputParallel" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-brand-500 transition">
+                                    <option value="A" selected>Paralelo A</option>
+                                    <option value="B">Paralelo B</option>
+                                    <option value="C">Paralelo C</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block font-semibold text-slate-300 mb-1">Código UID Tarjeta / Tag NFC (HEX)</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="inputNfcUid" readonly class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 font-mono text-neon-cyan text-xs">
+                                <button type="button" onclick="generateRandomUID()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl font-semibold transition" title="Generar UID aleatorio">
+                                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 hover:to-brand-600 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-brand-600/30 flex items-center justify-center space-x-2">
+                            <i data-lucide="save" class="w-4 h-4"></i>
+                            <span>Guardar Datos del Estudiante</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Tarjeta Holográfica 3D -->
+                <div class="lg:col-span-7 flex flex-col items-center space-y-6">
+                    <div class="w-full max-w-md h-64 card-3d-wrap group">
+                        <div id="card3d" class="card-3d-inner animate-float shadow-2xl">
+                            
+                            <!-- Cara Frontal -->
+                            <div class="card-front glass-panel holographic-bg border border-white/20 p-6 flex flex-col justify-between overflow-hidden relative">
+                                <div class="flex justify-between items-start z-10">
+                                    <div class="flex items-center space-x-2">
+                                        <div class="w-8 h-8 rounded-lg bg-white/10 backdrop-blur border border-white/20 flex items-center justify-center">
+                                            <i data-lucide="graduation-cap" class="w-5 h-5 text-neon-cyan"></i>
+                                        </div>
+                                        <div>
+                                            <h3 id="cardSchool" class="text-[10px] font-extrabold text-neon-cyan tracking-wider uppercase">U.E. 2 DE AGOSTO</h3>
+                                            <p class="text-[9px] text-slate-300 font-semibold tracking-widest uppercase">Credencial RFID/NFC</p>
+                                        </div>
+                                    </div>
+                                    <button onclick="flipCard()" class="p-1.5 bg-black/40 hover:bg-black/60 rounded-full text-slate-300 transition" title="Girar Tarjeta">
+                                        <i data-lucide="rotate-3d" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+
+                                <div class="z-10 my-2">
+                                    <div class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Estudiante</div>
+                                    <h2 id="cardName" class="text-xl font-extrabold text-white tracking-wide truncate">Grover Condori Quispe</h2>
+                                    <div class="flex items-center space-x-3 mt-1 text-xs">
+                                        <span id="cardGrade" class="px-2 py-0.5 rounded-md bg-brand-500/30 text-brand-300 font-bold border border-brand-400/30">6to "A"</span>
+                                        <span class="text-slate-400 font-mono text-[11px]">UID: <span id="cardUid" class="text-neon-cyan">A3:4B:89:C2</span></span>
+                                    </div>
+                                </div>
+
+                                <div class="flex justify-between items-end z-10 pt-2 border-t border-white/10">
+                                    <div class="flex items-center space-x-1.5 text-[10px] text-emerald-400 font-mono">
+                                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                                        <span>LECTOR REQUERIDO</span>
+                                    </div>
+                                    <i data-lucide="nfc" class="w-6 h-6 text-white/40"></i>
+                                </div>
+                            </div>
+
+                            <!-- Cara Posterior -->
+                            <div class="card-back glass-panel bg-slate-900 border border-white/10 p-6 flex flex-col items-center justify-between">
+                                <div class="w-full flex justify-between items-center">
+                                    <span class="text-[10px] font-mono text-slate-400">PASE DIGITAL DE VERIFICACIÓN</span>
+                                    <button onclick="flipCard()" class="p-1.5 bg-slate-800 rounded-full text-slate-300 hover:text-white">
+                                        <i data-lucide="x" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                                <div class="p-2 bg-white rounded-2xl shadow-lg border-2 border-neon-cyan">
+                                    <div id="qrcode"></div>
+                                </div>
+                                <p class="text-[10px] text-slate-400 font-mono">U.E. 2 de Agosto - Batallas</p>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- MODO 3: HARDWARE RC522 (WEBSERIAL, WEBSOCKETS/REST Y CÓDIGO C++) -->
+        <!-- ================================================================= -->
+        <section id="viewHardware" class="hidden space-y-6">
+            
+            <!-- Panel de Conexiones de Hardware Real -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Opciones de Conexión en Vivo -->
+                <div class="lg:col-span-6 glass-panel p-6 rounded-3xl border border-slate-800 space-y-5">
+                    <div class="flex justify-between items-center pb-3 border-b border-slate-800">
+                        <div class="flex items-center space-x-2">
+                            <div class="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                <i data-lucide="cpu" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-base font-bold text-white">Receptor de Señal RC522</h2>
+                                <p class="text-xs text-slate-400">Elige la interfaz de comunicación de tu lector casero</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MÉTODOS DE COMUNICACIÓN -->
+                    <div class="space-y-3">
+                        
+                        <!-- Método 1: WebSerial USB -->
+                        <div class="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 flex flex-col justify-between gap-3">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                                        <i data-lucide="usb" class="w-4 h-4 text-purple-400"></i>
+                                        1. Conexión USB Directa (WebSerial API)
+                                    </span>
+                                    <p class="text-[11px] text-slate-400 mt-1">Conecta tu Arduino Nano / ESP32 con cable OTG al celular o puerto USB de la PC a 115200 baudios.</p>
+                                </div>
+                                <span id="serialBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">Desconectado</span>
+                            </div>
+                            <button id="btnConnectSerial" onclick="connectWebSerial()" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-2 rounded-xl text-xs transition flex items-center justify-center space-x-2 shadow-md shadow-purple-600/20">
+                                <i data-lucide="plug" class="w-4 h-4"></i>
+                                <span>Conectar Lector USB OTG</span>
+                            </button>
+                        </div>
+
+                        <!-- Método 2: HTTP POST Local / WiFi WebSocket -->
+                        <div class="p-4 bg-slate-900/90 rounded-2xl border border-slate-800 space-y-3">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                                        <i data-lucide="wifi" class="w-4 h-4 text-emerald-400"></i>
+                                        2. Lector Inalámbrico WiFi (ESP32 / ESP8266)
+                                    </span>
+                                    <p class="text-[11px] text-slate-400 mt-1">Tu microcontrolador envía peticiones HTTP POST directas en la red escolar.</p>
+                                </div>
+                                <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">Escuchando Red</span>
+                            </div>
+
+                            <!-- Simulador de Trama Payload de Prueba HTTP/WS -->
+                            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex items-center gap-2">
+                                <input type="text" id="simPayloadInput" value="A3:4B:89:C2" placeholder="UID HEX ej: A3:4B:89:C2" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-xs text-neon-cyan focus:outline-none">
+                                <button onclick="simulatePayloadTrigger()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition flex-shrink-0 flex items-center gap-1">
+                                    <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                                    <span>Enviar Señal Test</span>
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- CONSOLA DE MONITOR TÉCNICO EN VIVO -->
+                    <div class="bg-black/95 rounded-2xl p-4 font-mono text-xs border border-slate-800 space-y-2">
+                        <div class="flex justify-between items-center text-slate-500 pb-2 border-b border-slate-800 text-[11px]">
+                            <span class="flex items-center gap-1.5 text-neon-cyan font-bold">
+                                <i data-lucide="terminal" class="w-3.5 h-3.5"></i>
+                                Monitor UART / HTTP Signal Log
+                            </span>
+                            <button onclick="document.getElementById('serialLogConsole').innerHTML=''" class="hover:text-slate-300">Limpiar</button>
+                        </div>
+                        <div id="serialLogConsole" class="h-36 overflow-y-auto space-y-1 text-[11px] text-slate-300">
+                            <div class="text-slate-500">[SISTEMA] Sistema iniciado. Esperando pulso físico desde RC522...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna Derecha: Código C++ para Microcontroladores -->
+                <div class="lg:col-span-6 glass-panel p-6 rounded-3xl border border-slate-800 space-y-4">
+                    <div class="flex justify-between items-center pb-3 border-b border-slate-800">
+                        <div class="flex items-center space-x-2">
+                            <div class="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                <i data-lucide="code-2" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-base font-bold text-white">Código C++ para Lector Casero</h2>
+                                <p class="text-xs text-slate-400">Carga este firmware en tu Arduino o ESP32</p>
+                            </div>
+                        </div>
+                        <button onclick="copyArduinoCode()" class="bg-slate-800 hover:bg-slate-700 text-xs text-brand-300 px-3 py-1.5 rounded-xl border border-slate-700 transition flex items-center gap-1">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            <span>Copiar C++</span>
+                        </button>
+                    </div>
+
+                    <!-- Selector de Tipo de Código -->
+                    <div class="flex space-x-2 text-xs">
+                        <button id="btnCodeArduino" onclick="switchCodeTab('arduino')" class="px-3 py-1.5 rounded-lg bg-brand-600 text-white font-bold">Arduino Nano (USB OTG)</button>
+                        <button id="btnCodeESP32" onclick="switchCodeTab('esp32')" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 font-bold hover:text-white">ESP32 / NodeMCU (WiFi)</button>
+                    </div>
+
+                    <pre id="codeDisplayBlock" class="bg-slate-950 p-4 rounded-2xl text-[11px] font-mono text-slate-300 border border-slate-800 overflow-x-auto h-72"><code>// Carga este código en Arduino Nano
+#include &lt;SPI.h&gt;
+#include &lt;MFRC522.h&gt;
+
+#define RST_PIN 9
+#define SS_PIN  10
+
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+
+void setup() {
+  Serial.begin(115200);
+  SPI.begin();
+  mfrc522.PCD_Init();
+  Serial.println("RC522_INIT_OK");
+}
+
+void loop() {
+  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return;
+
+  String uidStr = "";
+  for (byte i = 0; i &lt; mfrc522.uid.size; i++) {
+    if (mfrc522.uid.uidByte[i] &lt; 0x10) uidStr += "0";
+    uidStr += String(mfrc522.uid.uidByte[i], HEX);
+    if (i &lt; mfrc522.uid.size - 1) uidStr += ":";
+  }
+  uidStr.toUpperCase();
+
+  // Envío por puerto Serie USB para la PWA Asistencia
+  Serial.print("UID:");
+  Serial.println(uidStr);
+
+  mfrc522.PICC_HaltA();
+  mfrc522.PCD_StopCrypto1();
+  delay(1500); 
+}</code></pre>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="no-print glass-panel border-t border-slate-800/80 py-4 px-4 text-center text-xs text-slate-500">
+        <p>Unidad Educativa Técnico Humanístico "2 de Agosto" - Batallas &copy; 2026</p>
+    </footer>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toastNotification" class="no-print fixed bottom-6 right-6 transform translate-y-28 opacity-0 transition-all duration-300 bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center space-x-3 z-50 max-w-sm">
+        <div id="toastIconBg" class="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 flex-shrink-0">
+            <i id="toastIcon" data-lucide="check-circle" class="w-5 h-5"></i>
+        </div>
+        <div>
+            <h4 id="toastTitle" class="text-xs font-bold text-white">Notificación</h4>
+            <p id="toastMessage" class="text-[11px] text-slate-300">Detalles del mensaje...</p>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT APP LOGIC -->
+    <script>
+        // ESTADO Y VARIABLES GLOBALES
+        let deferredPwaPrompt = null;
+        let audioEnabled = true;
+        let currentRole = 'teacher';
+        let currentFilterGrade = '6to';
+        let currentFilterParallel = 'A';
+        let entryLimitTime = '08:00';
+        let serialPort = null;
+        let serialReader = null;
+
+        // Estudiante por defecto (U.E. 2 de Agosto)
+        let studentProfile = {
+            school: 'U.E. Técnico Humanístico 2 de Agosto',
+            name: 'Grover Condori Quispe',
+            grade: '6to',
+            parallel: 'A',
+            uid: 'A3:4B:89:C2'
+        };
+
+        // Base de datos local de estudiantes matriculados
+        let enrolledStudents = [
+            { uid: 'A3:4B:89:C2', name: 'Grover Condori Quispe', school: 'U.E. Técnico Humanístico 2 de Agosto', grade: '6to', parallel: 'A' },
+            { uid: 'B1:8C:33:4F', name: 'Ariel Mamani Flores', school: 'U.E. Técnico Humanístico 2 de Agosto', grade: '6to', parallel: 'A' },
+            { uid: 'C4:11:90:D5', name: 'Sonia Choque Laura', school: 'U.E. Técnico Humanístico 2 de Agosto', grade: '6to', parallel: 'B' },
+            { uid: 'D9:55:E2:10', name: 'Carlos Villca Mayta', school: 'U.E. Técnico Humanístico 2 de Agosto', grade: '5to', parallel: 'A' }
+        ];
+
+        // Registro de asistencias
+        let attendanceLogs = [];
+
+        // WEB AUDIO SYNTHESIZER
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+
+        function playSound(type) {
+            if (!audioEnabled) return;
+            try {
+                if (!audioCtx) audioCtx = new AudioContext();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'success') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now); // C5
+                    osc.frequency.setValueAtTime(880, now + 0.1); // A5
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else if (type === 'warning') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.setValueAtTime(349.23, now + 0.15);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else if (type === 'exit') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(659.25, now);
+                    osc.frequency.setValueAtTime(523.25, now + 0.12);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                }
+            } catch (e) {
+                console.warn('Audio synthesis issue:', e);
+            }
+        }
+
+        function triggerVibration() {
+            if ('vibrate' in navigator) {
+                navigator.vibrate([100, 50, 100]);
+            }
+        }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            const icon = document.getElementById('soundIcon');
+            if (audioEnabled) {
+                icon.setAttribute('data-lucide', 'volume-2');
+                showToast('Audio Activado', 'Efectos de sonido habilitados', 'volume-2');
+            } else {
+                icon.setAttribute('data-lucide', 'volume-x');
+                showToast('Audio Silenciado', 'Efectos de sonido deshabilitados', 'volume-x');
+            }
+            lucide.createIcons();
+        }
+
+        // PWA REGISTRATION
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                self.addEventListener('install', (e) => self.skipWaiting());
+                self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+                self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request).catch(() => caches.match(e.request))));
+            `;
+            const blob = new Blob([swCode], { type: 'application/javascript' });
+            navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPwaPrompt = e;
+            document.getElementById('btnInstallPwa').classList.remove('hidden');
+        });
+
+        function installApp() {
+            if (deferredPwaPrompt) {
+                deferredPwaPrompt.prompt();
+                deferredPwaPrompt.userChoice.then((choice) => {
+                    if (choice.outcome === 'accepted') {
+                        showToast('Instalando...', 'Aplicación instalada con éxito', 'download');
+                    }
+                    deferredPwaPrompt = null;
+                    document.getElementById('btnInstallPwa').classList.add('hidden');
+                });
+            } else {
+                alert("Para instalar en Android o PC:\nPresiona las opciones del navegador y selecciona 'Instalar aplicación' o 'Agregar a la pantalla principal'.");
+            }
+        }
+
+        // ON LOAD
+        window.onload = function() {
+            lucide.createIcons();
+            loadLocalStorageData();
+            updateStudentUI();
+            updateFilterUI();
+            renderAttendanceTable();
+            setupLocalMessageListener();
+        };
+
+        // PROCESADOR CENTRAL DE SEÑAL DE HARDWARE REAL
+        function handleHardwareSignalReceived(uidRaw) {
+            const cleanUid = uidRaw.trim().toUpperCase();
+            appendSerialLog(`[SEÑAL HARDWARE RC522 RECIBIDA] UID: ${cleanUid}`);
+            
+            // Efecto visual de señal detectada
+            pulseHardwareLed();
+            triggerVibration();
+
+            // Buscar si el UID corresponde a un alumno matriculado
+            let student = enrolledStudents.find(s => s.uid === cleanUid);
+
+            if (!student) {
+                // Si no está registrado en la BD simulada, usar el perfil actual
+                student = {
+                    uid: cleanUid,
+                    name: studentProfile.uid === cleanUid ? studentProfile.name : `Estudiante NFC (${cleanUid})`,
+                    school: studentProfile.school,
+                    grade: studentProfile.grade,
+                    parallel: studentProfile.parallel
+                };
+            }
+
+            // Registrar en la lista oficial
+            processAttendanceRecord(student);
+        }
+
+        function processAttendanceRecord(student) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const dateStr = now.toLocaleDateString();
+
+            let record = attendanceLogs.find(l => l.uid === student.uid && l.date === dateStr);
+
+            if (!record) {
+                // PRIMERA MARCA DEL DÍA = ENTRADA
+                const [limitH, limitM] = entryLimitTime.split(':').map(Number);
+                const isLate = (now.getHours() > limitH) || (now.getHours() === limitH && now.getMinutes() > limitM);
+
+                record = {
+                    id: Date.now(),
+                    name: student.name,
+                    school: student.school,
+                    grade: student.grade,
+                    parallel: student.parallel,
+                    uid: student.uid,
+                    date: dateStr,
+                    entryTime: timeStr,
+                    exitTime: '--:--',
+                    status: isLate ? 'Atrasado' : 'A tiempo'
+                };
+
+                attendanceLogs.unshift(record);
+
+                if (isLate) {
+                    playSound('warning');
+                    showToast('Entrada con Atraso', `${student.name} (${timeStr})`, 'clock');
+                } else {
+                    playSound('success');
+                    showToast('Entrada Registrada', `${student.name} (${timeStr})`, 'check-circle');
+                }
+            } else if (record.exitTime === '--:--') {
+                // SEGUNDA MARCA DEL DÍA = SALIDA
+                record.exitTime = timeStr;
+                record.status = 'Salida Marcada';
+                playSound('exit');
+                showToast('Salida Registrada', `${student.name} (${timeStr})`, 'log-out');
+            } else {
+                showToast('Registro Duplicado', `El alumno ${student.name} ya registró entrada y salida hoy.`, 'info');
+            }
+
+            saveLocalStorageData();
+            renderAttendanceTable();
+        }
+
+        function pulseHardwareLed() {
+            const led = document.getElementById('hardwareLedDot');
+            const headerTxt = document.getElementById('headerHwText');
+            
+            led.className = "relative inline-flex rounded-full h-3 w-3 bg-neon-cyan animate-ping";
+            headerTxt.innerText = "¡SEÑAL RC522 RECIBIDA!";
+            headerTxt.className = "text-neon-cyan font-mono font-bold";
+
+            setTimeout(() => {
+                led.className = "relative inline-flex rounded-full h-3 w-3 bg-emerald-500";
+                headerTxt.innerText = "Lector RC522 Activo";
+                headerTxt.className = "text-emerald-400 font-mono";
+            }, 2500);
+        }
+
+        // WEBSERIAL USB (HARDWARE DIRECTO CON CABLE OTG)
+        async function connectWebSerial() {
+            const badge = document.getElementById('serialBadge');
+            if ('serial' in navigator) {
+                try {
+                    serialPort = await navigator.serial.requestPort();
+                    await serialPort.open({ baudRate: 115200 });
+                    
+                    badge.innerText = "Conectado OTG USB";
+                    badge.className = "text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                    
+                    document.getElementById('headerHwText').innerText = "Lector USB Activo";
+                    showToast('Lector USB Listo', 'Esperando aproximación de tarjeta al módulo RC522', 'plug');
+                    
+                    readSerialLoop();
+                } catch (e) {
+                    showToast('Error Serial', 'No se pudo abrir el puerto serie USB', 'alert-circle');
+                }
+            } else {
+                alert("La API WebSerial no está disponible en este navegador. Utiliza Chrome en PC o Chrome Android.");
+            }
+        }
+
+        async function readSerialLoop() {
+            const textDecoder = new TextDecoderStream();
+            const readableStreamClosed = serialPort.readable.pipeTo(textDecoder.writable);
+            const reader = textDecoder.readable.getReader();
+
+            let buffer = "";
+
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    if (value) {
+                        buffer += value;
+                        const lines = buffer.split("\n");
+                        buffer = lines.pop(); // Mantener remanente incompleto
+
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (trimmed) {
+                                appendSerialLog(`RAW UART: ${trimmed}`);
+                                if (trimmed.includes("UID:")) {
+                                    const uidHex = trimmed.split("UID:")[1].trim();
+                                    handleHardwareSignalReceived(uidHex);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Error lectura serie:', err);
+            } finally {
+                reader.releaseLock();
+            }
+        }
+
+        // SIMULADOR DE TRAMA DE PRUEBA (PARA TESTING DE RED / HARDWARE)
+        function simulatePayloadTrigger() {
+            const uidInput = document.getElementById('simPayloadInput').value;
+            if (!uidInput) return;
+            handleHardwareSignalReceived(uidInput);
+        }
+
+        function setupLocalMessageListener() {
+            // Canal de difusión para recepción de eventos HTTP local/WebSocket
+            if ('BroadcastChannel' in window) {
+                const bc = new BroadcastChannel('rc522_hardware_signals');
+                bc.onmessage = (event) => {
+                    if (event.data && event.data.uid) {
+                        handleHardwareSignalReceived(event.data.uid);
+                    }
+                };
+            }
+        }
+
+        function appendSerialLog(msg) {
+            const consoleBox = document.getElementById('serialLogConsole');
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.innerText = `[${time}] ${msg}`;
+            consoleBox.appendChild(div);
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        // CÓDIGO C++ PARA MICROCONTROLADORES
+        function switchCodeTab(type) {
+            const display = document.getElementById('codeDisplayBlock');
+            const btnArduino = document.getElementById('btnCodeArduino');
+            const btnESP32 = document.getElementById('btnCodeESP32');
+
+            if (type === 'arduino') {
+                btnArduino.className = "px-3 py-1.5 rounded-lg bg-brand-600 text-white font-bold";
+                btnESP32.className = "px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 font-bold hover:text-white";
+                display.innerText = `// FIRMWARE ARDUINO NANO (CONEXIÓN CABLE OTG USB)
+#include <SPI.h>
+#include <MFRC522.h>
+
+#define RST_PIN 9
+#define SS_PIN  10
+
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+
+void setup() {
+  Serial.begin(115200);
+  SPI.begin();
+  mfrc522.PCD_Init();
+}
+
+void loop() {
+  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return;
+
+  String uidStr = "";
+  for (byte i = 0; i < mfrc522.uid.size; i++) {
+    if (mfrc522.uid.uidByte[i] < 0x10) uidStr += "0";
+    uidStr += String(mfrc522.uid.uidByte[i], HEX);
+    if (i < mfrc522.uid.size - 1) uidStr += ":";
+  }
+  uidStr.toUpperCase();
+
+  Serial.print("UID:");
+  Serial.println(uidStr);
+
+  mfrc522.PICC_HaltA();
+  mfrc522.PCD_StopCrypto1();
+  delay(1500);
+}`;
+            } else {
+                btnESP32.className = "px-3 py-1.5 rounded-lg bg-brand-600 text-white font-bold";
+                btnArduino.className = "px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 font-bold hover:text-white";
+                display.innerText = `// FIRMWARE ESP32 / NODEMCU (CONEXIÓN INALÁMBRICA WIFI)
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <SPI.h>
+#include <MFRC522.h>
+
+const char* ssid = "WIFI_ESCUELA_2_AGOSTO";
+const char* password = "PASSWORD_WIFI";
+const char* serverUrl = "http://192.168.1.100:8080/api/attendance"; // IP de la PC/Celular Maestro
+
+#define SS_PIN  5
+#define RST_PIN 22
+
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) { delay(500); }
+  
+  SPI.begin();
+  mfrc522.PCD_Init();
+}
+
+void loop() {
+  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return;
+
+  String uidStr = "";
+  for (byte i = 0; i < mfrc522.uid.size; i++) {
+    if (mfrc522.uid.uidByte[i] < 0x10) uidStr += "0";
+    uidStr += String(mfrc522.uid.uidByte[i], HEX);
+    if (i < mfrc522.uid.size - 1) uidStr += ":";
+  }
+  uidStr.toUpperCase();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(serverUrl);
+    http.addHeader("Content-Type", "application/json");
+    
+    String httpRequestData = "{\"uid\":\"" + uidStr + "\"}";
+    int httpResponseCode = http.POST(httpRequestData);
+    http.end();
+  }
+
+  mfrc522.PICC_HaltA();
+  mfrc522.PCD_StopCrypto1();
+  delay(1500);
+}`;
+            }
+        }
+
+        function copyArduinoCode() {
+            const code = document.getElementById('codeDisplayBlock').innerText;
+            navigator.clipboard.writeText(code);
+            showToast('Código Copiado', 'Pégalo e instálalo desde Arduino IDE', 'copy');
+        }
+
+        // GESTIÓN DE PERFIL ESTUDIANTE Y TABLA MAESTRO
+        function generateRandomUID() {
+            const hex = '0123456789ABCDEF';
+            let uid = '';
+            for (let i = 0; i < 4; i++) {
+                uid += hex.charAt(Math.floor(Math.random() * 16)) + hex.charAt(Math.floor(Math.random() * 16));
+                if (i < 3) uid += ':';
+            }
+            document.getElementById('inputNfcUid').value = uid;
+        }
+
+        function saveStudentProfile(e) {
+            e.preventDefault();
+            studentProfile = {
+                school: document.getElementById('inputSchool').value,
+                name: document.getElementById('inputName').value,
+                grade: document.getElementById('inputGrade').value,
+                parallel: document.getElementById('inputParallel').value,
+                uid: document.getElementById('inputNfcUid').value
+            };
+
+            // Agregar a matriculados
+            const idx = enrolledStudents.findIndex(s => s.uid === studentProfile.uid);
+            if (idx >= 0) enrolledStudents[idx] = studentProfile;
+            else enrolledStudents.push(studentProfile);
+
+            saveLocalStorageData();
+            updateStudentUI();
+            showToast('Perfil Guardado', 'Credencial de estudiante lista', 'check-circle');
+            playSound('success');
+        }
+
+        function updateStudentUI() {
+            document.getElementById('inputSchool').value = studentProfile.school;
+            document.getElementById('inputName').value = studentProfile.name;
+            document.getElementById('inputGrade').value = studentProfile.grade;
+            document.getElementById('inputParallel').value = studentProfile.parallel;
+            document.getElementById('inputNfcUid').value = studentProfile.uid;
+
+            document.getElementById('cardSchool').innerText = studentProfile.school.toUpperCase();
+            document.getElementById('cardName').innerText = studentProfile.name;
+            document.getElementById('cardGrade').innerText = `${studentProfile.grade} "${studentProfile.parallel}"`;
+            document.getElementById('cardUid').innerText = studentProfile.uid;
+
+            const qrContainer = document.getElementById("qrcode");
+            qrContainer.innerHTML = "";
+            // Fix: Pass a compact string instead of a long JSON payload to prevent qrcode.js length overflow
+            const qrText = `UID:${studentProfile.uid}|${studentProfile.name}|${studentProfile.grade}${studentProfile.parallel}`;
+            new QRCode(qrContainer, {
+                text: qrText,
+                width: 120,
+                height: 120
+            });
+        }
+
+        function flipCard() {
+            document.getElementById('card3d').classList.toggle('flipped');
+        }
+
+        function setFilterGrade(grade) {
+            currentFilterGrade = grade;
+            updateFilterUI();
+            renderAttendanceTable();
+        }
+
+        function setFilterParallel(parallel) {
+            currentFilterParallel = parallel;
+            updateFilterUI();
+            renderAttendanceTable();
+        }
+
+        function updateFilterUI() {
+            document.querySelectorAll('.btn-filter-grade').forEach(btn => {
+                if (btn.dataset.grade === currentFilterGrade) {
+                    btn.className = "btn-filter-grade px-3 py-1.5 rounded-xl font-bold transition bg-brand-600 text-white shadow-md shadow-brand-600/30";
+                } else {
+                    btn.className = "btn-filter-grade px-3 py-1.5 rounded-xl font-bold transition text-slate-400 hover:text-white hover:bg-slate-800";
+                }
+            });
+
+            document.querySelectorAll('.btn-filter-parallel').forEach(btn => {
+                if (btn.dataset.parallel === currentFilterParallel) {
+                    btn.className = "btn-filter-parallel px-3 py-1.5 rounded-xl font-bold transition bg-brand-600 text-white shadow-md shadow-brand-600/30";
+                } else {
+                    btn.className = "btn-filter-parallel px-3 py-1.5 rounded-xl font-bold transition text-slate-400 hover:text-white hover:bg-slate-800";
+                }
+            });
+
+            document.getElementById('labelCurrentFilter').innerText = `${currentFilterGrade} "${currentFilterParallel}"`;
+        }
+
+        function updateLimitTime() {
+            entryLimitTime = document.getElementById('inputLimitTime').value;
+            renderAttendanceTable();
+        }
+
+        function renderAttendanceTable() {
+            const tbody = document.getElementById('attendanceTableBody');
+            tbody.innerHTML = '';
+
+            const searchQuery = document.getElementById('searchStudentInput').value.toLowerCase();
+
+            const filtered = attendanceLogs.filter(log => 
+                log.grade === currentFilterGrade && 
+                log.parallel === currentFilterParallel &&
+                log.name.toLowerCase().includes(searchQuery)
+            );
+
+            const gradeTotal = attendanceLogs.filter(l => l.grade === currentFilterGrade && l.parallel === currentFilterParallel);
+            document.getElementById('statTotal').innerText = gradeTotal.length;
+            document.getElementById('statOnTime').innerText = gradeTotal.filter(l => l.status === 'A tiempo').length;
+            document.getElementById('statLate').innerText = gradeTotal.filter(l => l.status === 'Atrasado').length;
+            document.getElementById('statExit').innerText = gradeTotal.filter(l => l.exitTime !== '--:--').length;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="p-8 text-center text-slate-500 font-mono">
+                            Sin marcaciones registradas para ${currentFilterGrade} "${currentFilterParallel}".<br>
+                            <span class="text-[11px] text-slate-600">Acerque la tarjeta o celular al lector casero RC522.</span>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            filtered.forEach(log => {
+                let badgeStyle = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+                if (log.status === 'Atrasado') badgeStyle = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                if (log.status === 'Salida Marcada') badgeStyle = 'bg-brand-500/10 text-brand-400 border-brand-500/20';
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-900/60 transition";
+                tr.innerHTML = `
+                    <td class="p-3.5 font-bold text-white">${log.name}</td>
+                    <td class="p-3.5 text-slate-400">${log.school}</td>
+                    <td class="p-3.5 font-mono text-neon-cyan">${log.uid}</td>
+                    <td class="p-3.5 font-mono text-emerald-400 font-bold">${log.entryTime}</td>
+                    <td class="p-3.5 font-mono text-brand-400 font-bold">${log.exitTime}</td>
+                    <td class="p-3.5">
+                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold border ${badgeStyle}">
+                            ${log.status}
+                        </span>
+                    </td>
+                    <td class="p-3.5 text-right no-print">
+                        <button onclick="deleteRecord(${log.id})" class="p-1 text-slate-500 hover:text-rose-400 transition" title="Eliminar marca">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            lucide.createIcons();
+        }
+
+        function deleteRecord(id) {
+            attendanceLogs = attendanceLogs.filter(l => l.id !== id);
+            saveLocalStorageData();
+            renderAttendanceTable();
+        }
+
+        function clearAttendanceData() {
+            if (confirm("¿Borrar todos los registros de asistencia?")) {
+                attendanceLogs = [];
+                saveLocalStorageData();
+                renderAttendanceTable();
+                showToast('Lista Limpia', 'Se eliminaron las marcaciones almacenadas', 'trash-2');
+            }
+        }
+
+        function exportToCSV() {
+            if (attendanceLogs.length === 0) {
+                showToast('Sin datos', 'No hay registros para exportar', 'alert-circle');
+                return;
+            }
+
+            let csv = "Estudiante,Colegio,Curso,Paralelo,UID_RFID,Fecha,Hora_Entrada,Hora_Salida,Estado\n";
+            attendanceLogs.forEach(l => {
+                csv += `"${l.name}","${l.school}","${l.grade}","${l.parallel}","${l.uid}","${l.date}","${l.entryTime}","${l.exitTime}","${l.status}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Asistencia_${currentFilterGrade}_${currentFilterParallel}_2deAgosto.csv`;
+            a.click();
+        }
+
+        function printAttendanceReport() {
+            window.print();
+        }
+
+        function setRole(role) {
+            currentRole = role;
+            document.getElementById('viewTeacher').classList.add('hidden');
+            document.getElementById('viewStudent').classList.add('hidden');
+            document.getElementById('viewHardware').classList.add('hidden');
+
+            document.getElementById('navTeacher').className = "px-3 py-1.5 rounded-lg font-semibold transition flex items-center space-x-1.5 text-slate-400 hover:text-white";
+            document.getElementById('navStudent').className = "px-3 py-1.5 rounded-lg font-semibold transition flex items-center space-x-1.5 text-slate-400 hover:text-white";
+            document.getElementById('navHardware').className = "px-3 py-1.5 rounded-lg font-semibold transition flex items-center space-x-1.5 text-slate-400 hover:text-white";
+
+            if (role === 'teacher') {
+                document.getElementById('viewTeacher').classList.remove('hidden');
+                document.getElementById('navTeacher').className = "px-3 py-1.5 rounded-lg font-semibold transition flex items-center space-x-1.5 bg-brand-600 text-white shadow-md";
+                renderAttendanceTable();
+            } else if (role === 'student') {
+                document.getElementById('viewStudent').classList.remove('hidden');
+                document.getElementById('navStudent').className = "px-3 py-1.5 rounded-lg font-semibold transition flex items-center space-x-1.5 bg-brand-600 text-white shadow-md";
+            } else if (role === 'hardware') {
+                document.getElementById('viewHardware').classList.remove('hidden');
+                document.getElementById('navHardware').className = "px-3 py-1.5 rounded-lg font-semibold transition flex items-center space-x-1.5 bg-brand-600 text-white shadow-md";
+            }
+        }
+
+        function showToast(title, message, iconName = 'check-circle') {
+            const toast = document.getElementById('toastNotification');
+            document.getElementById('toastTitle').innerText = title;
+            document.getElementById('toastMessage').innerText = message;
+            document.getElementById('toastIcon').setAttribute('data-lucide', iconName);
+            lucide.createIcons();
+
+            toast.classList.remove('translate-y-28', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-28', 'opacity-0');
+            }, 3200);
+        }
+
+        function saveLocalStorageData() {
+            localStorage.setItem('eduPass_studentProfile', JSON.stringify(studentProfile));
+            localStorage.setItem('eduPass_attendanceLogs', JSON.stringify(attendanceLogs));
+            localStorage.setItem('eduPass_enrolledStudents', JSON.stringify(enrolledStudents));
+        }
+
+        function loadLocalStorageData() {
+            const savedProfile = localStorage.getItem('eduPass_studentProfile');
+            if (savedProfile) studentProfile = JSON.parse(savedProfile);
+            else generateRandomUID();
+
+            const savedLogs = localStorage.getItem('eduPass_attendanceLogs');
+            if (savedLogs) attendanceLogs = JSON.parse(savedLogs);
+
+            const savedEnrolled = localStorage.getItem('eduPass_enrolledStudents');
+            if (savedEnrolled) enrolledStudents = JSON.parse(savedEnrolled);
+        }
+    </script>
+</body>
+</html>
